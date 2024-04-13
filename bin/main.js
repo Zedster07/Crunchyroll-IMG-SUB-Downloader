@@ -22,19 +22,10 @@ async function checkLogin() {
 
 async function getNewTokenBasic() {
     const {body} = await fetch("GET","https://raw.githubusercontent.com/anidl/multi-downloader-nx/master/modules/module.api-urls.ts");
-    // console.log(tok);
-    // const data = await tok.text();
-    // console.log(data);
     const data = body;
     const pattern = /beta_authBasicMob:\s*'([^']+)'/;
-
-    // Use the exec() method to search for the pattern in the text data
     const match = pattern.exec(data);
-
-    // Extract the value from the matched result
-    const value = match && match[1]; // match[1] contains the captured value
-
-
+    const value = match && match[1];
     return value;
 }
 

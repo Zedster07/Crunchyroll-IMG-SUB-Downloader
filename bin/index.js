@@ -107,12 +107,49 @@ const getFullyAvailableSubs = async (episodes, sq) => {
     }
 }
 
+const parseSeasonInput = (input , seasonsData) => {
+    const parts = input.split(/[, -]/);
+    console.log(parts);
+    const selectedSeasons = [];
+    for (const part of parts) {
+        if (input.includes('-')) {
+            // Range of seasons
+            const [start, end] = parts.map(s => parseInt(s.trim()));
+            for (let i = start; i <= end; i++) {
+                if (i >= 1 && i <= seasonsData.length) {
+                    selectedSeasons.push(i);
+                }
+            }
+        } else {
+            // Single season
+            const season = parseInt(part.trim());
+            if (season >= 1 && season <= seasonsData.length) {
+                selectedSeasons.push(season);
+            }
+        }
+    }
+    return selectedSeasons;
+}
+
 const getSubs = async (firstResult, max) => {
     if(firstResult) {
         fs.mkdir(`downloads/${firstResult.title}/subs`, { recursive: true }, () => {});
         const anime = await cr.getAnime(firstResult.id);
         const { items: seasons } = await cr.getSeasons(anime.id);
-        const anime_seasons = seasons.filter(item => item.is_subbed);
+        const anime_seasons = seasons.filter(item => item.is_subbed);   
+        // const anime_seasons_list = anime_seasons.map((item , index) => `[${index+1}] - ${item.title}`);
+        // console.log("Seasons found: \n");
+        // console.log(anime_seasons_list.join('\n'));
+        // console.log("\n");
+        // const seasons_tod = readlineSync.question(`Choose a seasons (list: 1,2,3.. or range:1-5 or one: 1): `);
+        // const selected_seasons = parseSeasonInput(seasons_tod, anime_seasons);
+        
+        // console.log(selected_seasons);
+
+        // return;
+
+         
+
         const eps = await cr.getEpisodes(anime_seasons[0].id); 
         const episodes = eps.items.filter(item => item.episode_number != null).sort((a,b) => a.episode_number - b.episode_number)
         .map(item => ({seasonNumber:item.season_number, episodeNumber:item.episode_number, serieTitle:item.series_title,...item?.versions?.find(it => it.audio_locale == "ja-JP")}));
