@@ -63,10 +63,9 @@ const getImages = async (firstResult) => {
 }
 
 
-const getFullyAvailableSubs = async (episodes, sq) => {
+const getFullyAvailableSubs = async (episodes, sq,season) => {
     const keys = episodes.map(item => Object.keys(item.streams));
     let intersection = new Set(keys[0]);
-
     for (let i = 1; i < keys.length; i++) {
     const currentArray = keys[i];
         intersection = new Set(currentArray.filter(item => intersection.has(item)));
@@ -76,9 +75,10 @@ const getFullyAvailableSubs = async (episodes, sq) => {
     const list = intersectionArray.map((item , index) => `[${index+1}] - ${item}`);
     process.stdout.write('\x1Bc');
     if(list.length == 0) {
-        console.log(`No available subtitles found for ${firstResult.title}`);
+        console.log(`No available subtitles found for ${season.title}`);
         return;
     }
+    
     console.log("Subtitles found: \n");
     console.log(list.join('\n'));
     console.log("\n");
@@ -87,7 +87,7 @@ const getFullyAvailableSubs = async (episodes, sq) => {
     console.log("\n");
     const idx = parseInt(subSelected);
     if(idx >= 1 && idx <= intersectionArray.length) {
-        fs.mkdir(`downloads/${sq.title}/subs/${intersectionArray[idx - 1]}`, { recursive: true }, () => {});
+        fs.mkdir(`downloads/${sq.title}/${season.title}/subs/${intersectionArray[idx - 1]}`, { recursive: true }, () => {});
         process.stdout.write('\x1Bc');
         console.log('Downloading subtitles... ')
         for (let index = 0; index < episodes.length; index++) {
@@ -96,7 +96,7 @@ const getFullyAvailableSubs = async (episodes, sq) => {
             if(element.episodeNumber) {
                 const fileName = `${element.serieTitle}-S${element.seasonNumber}-E${element.episodeNumber}.${sub.format}`;
                 try {
-                    await downloadFile(sub.url,  `downloads/${sq.title}/subs/${intersectionArray[idx - 1]}/${fileName}`);
+                    await downloadFile(sub.url,  `downloads/${sq.title}/${season.title}/subs/${intersectionArray[idx - 1]}/${fileName}`);
                     console.log(`${fileName} downloaded successfully`)
                 } catch (error) {
                     console.error(`Error downloading file: ${fileName}`)
@@ -107,27 +107,39 @@ const getFullyAvailableSubs = async (episodes, sq) => {
     }
 }
 
-const parseSeasonInput = (input , seasonsData) => {
+const parseInput = (input , seasonsData) => {
+
+    let selectedSeasons = [];
+    if(input.trim() == "" || input == "all") {
+        console.log("Selecting all seasons...");
+        selectedSeasons = seasonsData.map((item , index) => index+1)
+        return selectedSeasons;
+    }
+
     const parts = input.split(/[, -]/);
-    console.log(parts);
-    const selectedSeasons = [];
-    for (const part of parts) {
-        if (input.includes('-')) {
-            // Range of seasons
-            const [start, end] = parts.map(s => parseInt(s.trim()));
-            for (let i = start; i <= end; i++) {
-                if (i >= 1 && i <= seasonsData.length) {
-                    selectedSeasons.push(i);
-                }
-            }
-        } else {
-            // Single season
-            const season = parseInt(part.trim());
-            if (season >= 1 && season <= seasonsData.length) {
-                selectedSeasons.push(season);
+    
+    if (input.includes('-')) {
+        // Range of seasons
+        const [start, end] = parts.map(s => parseInt(s.trim()));
+        if(end > seasonsData.length) {
+            return false;
+        }
+        for (let i = start; i <= end; i++) {
+            if (i >= 1 && i <= seasonsData.length) {
+                selectedSeasons.push(i);
             }
         }
+    } else if(input.includes(',')){
+        selectedSeasons = parts.map(item => parseInt(item));
+    } else {
+        const season = parseInt(input.trim());
+        if (season >= 1 && season <= seasonsData.length) {
+            selectedSeasons.push(season);
+        } else {
+            return false;
+        }
     }
+
     return selectedSeasons;
 }
 
@@ -137,42 +149,48 @@ const getSubs = async (firstResult, max) => {
         const anime = await cr.getAnime(firstResult.id);
         const { items: seasons } = await cr.getSeasons(anime.id);
         const anime_seasons = seasons.filter(item => item.is_subbed);   
-        // const anime_seasons_list = anime_seasons.map((item , index) => `[${index+1}] - ${item.title}`);
-        // console.log("Seasons found: \n");
-        // console.log(anime_seasons_list.join('\n'));
-        // console.log("\n");
-        // const seasons_tod = readlineSync.question(`Choose a seasons (list: 1,2,3.. or range:1-5 or one: 1): `);
-        // const selected_seasons = parseSeasonInput(seasons_tod, anime_seasons);
+        const anime_seasons_list = anime_seasons.map((item , index) => `[${index+1}] - ${item.title}`);
+        console.log("Seasons found: \n");
+        console.log(anime_seasons_list.join('\n'));
+        console.log("\n");
+        const seasons_tod = readlineSync.question(`Choose a seasons (list: 1,2,3.. or range:1-5 or one: 1): `);
+        const selected_seasons = parseInput(seasons_tod, anime_seasons);
+
+        if(!selected_seasons){
+            console.log("Failed!, wrong values");
+            return;
+        }
+       
+        for (let i in selected_seasons) {
         
-        // console.log(selected_seasons);
-
-        // return;
-
+            const dat = selected_seasons[i];
+            const eps = await cr.getEpisodes(anime_seasons[dat-1].id); 
+            
+            const episodes = eps.items.filter(item => item.episode_number != null).sort((a,b) => a.episode_number - b.episode_number)
+            .map(item => ({seasonNumber:item.season_number, episodeNumber:item.episode_number, serieTitle:item.series_title,...item?.versions?.find(it => it.audio_locale == "ja-JP")}));
+            const maxEps = parseInt(max) < episodes.length ? parseInt(max) : episodes.length;
+            const userInput = readlineSync.question(`You are about to download ${maxEps} subtitle files for ${anime_seasons[dat-1].title}, proceed? y/n: `); 
+            console.log("\n");
+            process.stdout.write('\x1Bc');
+            if(userInput == 'y' || userInput == "Y" || userInput == "") {
+                let epsStreams = [];
+                const bar = new ProgressBar('Fetching episodes [:bar] :percent', { total:maxEps });
+                for (let index = 0; index < maxEps; index++) {  
+                    const element = episodes[index];
+                    const streams = await cr.getStreams2(element.media_guid);
+                    if(streams?.meta?.subtitles) {
+                        epsStreams.push({episodeNumber: element.episodeNumber, serieTitle:element.serieTitle, seasonNumber:element.seasonNumber ,streams:streams?.meta?.subtitles});
+                    }
+                    bar.tick()
+                }
+                process.stdout.write('\x1Bc');
+                console.log("Fetching subtitles...");
+                await getFullyAvailableSubs(epsStreams, firstResult, anime_seasons[dat-1]);
+            }
+        }
          
 
-        const eps = await cr.getEpisodes(anime_seasons[0].id); 
-        const episodes = eps.items.filter(item => item.episode_number != null).sort((a,b) => a.episode_number - b.episode_number)
-        .map(item => ({seasonNumber:item.season_number, episodeNumber:item.episode_number, serieTitle:item.series_title,...item?.versions?.find(it => it.audio_locale == "ja-JP")}));
-        const maxEps = parseInt(max) < episodes.length ? parseInt(max) : episodes.length;
-        const userInput = readlineSync.question(`You are about to download ${maxEps} subtitle files, proceed? y/n: ` ); 
-        console.log("\n");
-        process.stdout.write('\x1Bc');
-        if(userInput == 'y' || userInput == "Y" || userInput == "") {
-            let epsStreams = [];
-            const bar = new ProgressBar('Fetching episodes [:bar] :percent', { total:maxEps });
-            for (let index = 0; index < maxEps; index++) {
-                
-                const element = episodes[index];
-                const streams = await cr.getStreams2(element.media_guid);
-                if(streams?.meta?.subtitles) {
-                    epsStreams.push({episodeNumber: element.episodeNumber, serieTitle:element.serieTitle, seasonNumber:element.seasonNumber ,streams:streams?.meta?.subtitles});
-                }
-                bar.tick()
-            }
-            process.stdout.write('\x1Bc');
-            console.log("Fetching subtitles...");
-            getFullyAvailableSubs(epsStreams, firstResult);
-        }
+        
     } else {
         console.log("Something wrong happend!")
     }
@@ -235,7 +253,7 @@ const displayHelp = () => {
     }
 
     if(email == "" || password == "") {
-        console.log("Please enter credentials (-e <email> -p <password> )")
+        console.log("Please enter credentials (-e <email> -p <password>)")
     }
 
     await cr.login(email, password);
@@ -245,27 +263,33 @@ const displayHelp = () => {
 
     fs.mkdir(`downloads`, { recursive: true }, (err) => {});
 
-
     process.stdout.write('\x1Bc');
     const list = topResults.items.map((item , index) => `[${index+1}] - ${item.title}`);
     console.log("Animes found: \n");
     console.log(list.join('\n'));
     console.log("\n");
-    const animeSelected = readlineSync.question(`Select an anime [1-${topResults.items.length}]: `);
+    const animeSelected = readlineSync.question(`Select an anime (list: 1,2,3.. or range:1-5 or one: 1): `);
+    const selected = parseInput(animeSelected, list);
     console.log("\n");
-    const idx = parseInt(animeSelected);
-    if(idx >= 1 && idx <= topResults.items.length) {
-        firstResult = topResults.items[idx-1];
-        if(exType == "images") {
-            getImages(firstResult)
-        } else if(exType == "subs"){
-            getSubs(firstResult , max);
+    for(let s of selected) {
+        const idx = parseInt(s);
+        if(idx >= 1 && idx <= topResults.items.length) {
+            firstResult = topResults.items[idx-1];
+            process.stdout.write('\x1Bc');
+            console.log(`Working on ${firstResult.title}:`)
+
+            if(exType == "images") {
+                await getImages(firstResult)
+            } else if(exType == "subs"){
+                await getSubs(firstResult , max);
+            } else {
+                await getImages(firstResult)
+                await getSubs(firstResult , max);
+            }
         } else {
-            await getImages(firstResult)
-            await getSubs(firstResult , max);
+            console.log("Failed !, please select a correct number");
         }
-    } else {
-        console.log("Failed !, please select a correct number");
     }
+    
 
 })();
