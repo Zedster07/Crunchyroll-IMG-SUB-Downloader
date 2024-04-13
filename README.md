@@ -31,11 +31,11 @@ Options:
 
 Search for anime and download images:
 
-node anime-downloader.js -s "Attack on Titan" -t images
+```npm start -- -s "Attack on Titan" -t images -e your_crunchyroll@email.com -p your_crunchyroll_pass ```
 
 Download subtitles for anime episodes:
 
-node anime-downloader.js -s "Naruto" -t subs -e your@email.com -p yourpassword
+```npm start -- -s "Naruto" -t subs -e your@email.com -p yourpassword```
 
 ## License
 
