@@ -162,28 +162,37 @@ const displayHelp = () => {
     let max = 999999999;
 
     for (let index = 0; index < argv.length; index++) {
-        const element = argv[index];
-        switch (element) {
-            case "-s":
-                sq = argv[index + 1]
-                break;
-            case "-t":
-                exType = argv[index + 1]
-                break;
-            case "-e":
-                email = argv[index + 1]
-                break;
-            case "-p":
-                password = argv[index + 1]
-                break;
-            case "-m":
-                max=argv[index + 1]
-            default:
-                break;
+        const match = argv[index].match(/^--?(\w+)$/);
+        if (match) {
+            const option = match[1];
+            const value = argv[index + 1];
+            switch (option) {
+                case "s":
+                case "search":
+                    sq = value;
+                    break;
+                case "t":
+                case "type":
+                    exType = value;
+                    break;
+                case "e":
+                case "email":
+                    email = value;
+                    break;
+                case "p":
+                case "password":
+                    password = value;
+                    break;
+                case "m":
+                case "max":
+                    max = value;
+                    break;
+                default:
+                    break;
+            }
         }
-        
     }
-    
+
     if (argv.includes("-h") || argv.includes("--help")) {
         displayHelp();
     }
